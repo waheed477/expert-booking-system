@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
+import toast from 'react-hot-toast';
+import { Toast } from "@/components/common/Toast";
 
 // Schema for the form, extending the basic booking input requirements
 const bookingFormSchema = z.object({
@@ -38,7 +39,6 @@ export default function Booking() {
 
   const { data: expert, isLoading: isExpertLoading } = useExpert(expertId);
   const { mutate: createBooking, isPending: isBookingPending } = useCreateBooking();
-  const { toast } = useToast();
 
   const form = useForm<BookingFormData>({
     resolver: zodResolver(bookingFormSchema),
@@ -85,20 +85,18 @@ export default function Booking() {
 
     createBooking(payload, {
       onSuccess: (booking) => {
+        toast.success('Booking confirmed successfully!');
         setLocation(`/confirmation/${booking.id}`);
       },
       onError: (error) => {
-        toast({
-          title: "Booking Failed",
-          description: error.message,
-          variant: "destructive",
-        });
+        toast.error(error.message || 'Booking failed. Please try again.');
       },
     });
   };
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <Toast />
       <Header />
       
       <main className="container mx-auto px-4 py-8 max-w-6xl">

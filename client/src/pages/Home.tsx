@@ -1,22 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useExperts } from "@/hooks/use-experts";
 import { ExpertCard } from "@/components/experts/ExpertCard";
 import { Header } from "@/components/layout/Header";
 import { Input } from "@/components/ui/input";
 import { Search, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { useDebounce } from "@/hooks/useDebounce";
+import { ExpertCardSkeleton } from "@/components/common/LoadingSkeleton";
 
 const CATEGORIES = ["All", "Astrology", "Vastu", "Numerology", "Tarot", "Psychology"];
 
 export default function Home() {
-  const [search, setSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearch = useDebounce(searchTerm, 500);
   const [category, setCategory] = useState("All");
+  const [page, setPage] = useState(1);
   
-  // Use debounce mechanism ideally, but keeping it simple for now as requested by user constraints
-  const { data: experts, isLoading, isError } = useExperts({ 
-    search, 
-    category: category === "All" ? undefined : category 
+  const { data, isLoading, isError } = useExperts({ 
+    search: debouncedSearch, 
+    category: category === "All" ? undefined : category,
+    page
   });
+
+  const experts = data?.data || [];
+  const pagination = data?.pagination || {};
+
+  const loadMore = () => {
+    setPage(prev => prev + 1);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -58,8 +69,8 @@ export default function Home() {
               type="text"
               placeholder="Search by name or keyword..."
               className="w-full pl-12 pr-4 h-14 rounded-2xl border-slate-200 shadow-xl shadow-indigo-500/5 text-lg focus-visible:ring-indigo-500"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </motion.div>
         </div>
@@ -86,8 +97,10 @@ export default function Home() {
 
         {/* Experts Grid */}
         {isLoading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
+            {[...Array(8)].map((_, i) => (
+              <ExpertCardSkeleton key={i} />
+            ))}
           </div>
         ) : isError ? (
           <div className="text-center py-20 text-red-500">
@@ -99,17 +112,38 @@ export default function Home() {
             <p className="text-slate-500">Try adjusting your search or category filters.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
-            {experts?.map((expert, index) => (
-              <motion.div
-                key={expert.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.05 }}
-              >
-                <ExpertCard expert={expert} />
-              </motion.div>
-            ))}
+          <div className="space-y-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
+              {experts.map((expert, index) => (
+                <motion.div
+                  key={expert.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: index * 0.05 }}
+                >
+                  <ExpertCard expert={expert} />
+                </motion.div>
+              ))}
+            </div>
+
+            {pagination.pages > page && (
+              <div className="text-center mt-8">
+                <Button
+                  onClick={loadMore}
+                  disabled={isLoading}
+                  className="px-8 h-12 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Experts'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </main>

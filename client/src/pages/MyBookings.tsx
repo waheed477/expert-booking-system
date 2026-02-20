@@ -8,10 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Search, Calendar, Clock, Loader2, XCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { BookingCardSkeleton } from "@/components/common/LoadingSkeleton";
 
 export default function MyBookings() {
   const [email, setEmail] = useState("");
   const [queryEmail, setQueryEmail] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const { data: bookings, isLoading } = useBookings(queryEmail);
   const { mutate: updateStatus, isPending: isUpdating } = useUpdateBookingStatus();
 
@@ -83,15 +85,21 @@ export default function MyBookings() {
             </TabsList>
 
             {isLoading ? (
-              <div className="flex justify-center py-20">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+              <div className="grid gap-4">
+                {[...Array(3)].map((_, i) => (
+                  <BookingCardSkeleton key={i} />
+                ))}
               </div>
             ) : bookings && bookings.length > 0 ? (
               ["all", "confirmed", "pending", "completed"].map((tab) => (
                 <TabsContent key={tab} value={tab} className="space-y-4">
                   {filteredBookings(tab).length === 0 ? (
-                    <div className="text-center py-12 text-slate-500 bg-white rounded-2xl border border-dashed border-slate-200">
-                      No {tab === 'all' ? '' : tab} bookings found.
+                    <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                      <svg className="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <h3 className="mt-2 text-sm font-medium text-slate-900">No bookings found</h3>
+                      <p className="mt-1 text-sm text-slate-500">No {tab === 'all' ? '' : tab} bookings found.</p>
                     </div>
                   ) : (
                     filteredBookings(tab).map((booking) => (
@@ -137,9 +145,21 @@ export default function MyBookings() {
                   )}
                 </TabsContent>
               ))
+            ) : queryEmail ? (
+              <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                <svg className="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-slate-900">No bookings found</h3>
+                <p className="mt-1 text-sm text-slate-500">No bookings found for this email.</p>
+              </div>
             ) : (
-              <div className="text-center py-20 text-slate-500">
-                No bookings found for this email.
+              <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                <svg className="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-slate-900">View your bookings</h3>
+                <p className="mt-1 text-sm text-slate-500">Enter your email above to see your booking history.</p>
               </div>
             )}
           </Tabs>

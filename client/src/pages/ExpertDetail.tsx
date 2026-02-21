@@ -13,17 +13,25 @@ import { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useSocket } from '@/context/SocketContext';
+import { toast } from 'sonner';
 
 export default function ExpertDetail() {
-  const { id } = useParams();
-  const expertId = parseInt(id || "0");
+  const params = useParams();
+  // FIX: ID ko string ki tarah rakho, parseInt mat karo
+  const expertId = params?.id || "";
+  
+  console.log('Expert ID from URL:', expertId); // Debug log
+  
   const [, setLocation] = useLocation();
-  const { data: expert, isLoading, isError } = useExpert(expertId);
+  const { data: expert, isLoading, isError, refetch } = useExpert(expertId);
   const { send, subscribe } = useWebSocket('/ws');
+  const { socket, online, joinExpertRoom, leaveExpertRoom } = useSocket();
 
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<string>("");
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
+  const [slots, setSlots] = useState(expert?.availableSlots || []);
 
   // Set default date when data loads
   useEffect(() => {
@@ -40,7 +48,7 @@ export default function ExpertDetail() {
     send('join', { expertId });
 
     // Listen for booked slots
-    const unsubscribeBooked = subscribe('slotBooked', (payload: any) => {
+    const unsubscribeBooked = subscribe('slotBooked', (payload: { expertId: string; date: string; time: string }) => {
       if (payload.expertId === expertId) {
         setBookedSlots(prev => new Set(prev).add(`${payload.date}-${payload.time}`));
       }
@@ -50,6 +58,38 @@ export default function ExpertDetail() {
       unsubscribeBooked();
     };
   }, [expertId, send, subscribe]);
+
+  // Real-time updates with socket context
+  useEffect(() => {
+    if (expert?._id && online) {
+      joinExpertRoom(expert._id);
+      
+      // Listen for slot updates
+      socket?.on('slot-booked', (data) => {
+        if (data.expertId === expert._id) {
+          toast.info('🔔 A slot was just booked!', {
+            description: `${data.timeSlot} on ${new Date(data.date).toLocaleDateString()}`
+          });
+          
+          // Refresh expert data
+          refetch();
+        }
+      });
+
+      socket?.on('slot-freed', (data) => {
+        if (data.expertId === expert._id) {
+          toast.success('✅ Slot is available again!');
+          refetch();
+        }
+      });
+
+      return () => {
+        socket?.off('slot-booked');
+        socket?.off('slot-freed');
+        leaveExpertRoom(expert._id);
+      };
+    }
+  }, [expert?._id, online, joinExpertRoom, leaveExpertRoom, socket, refetch]);
 
   const handleSlotSelect = (time: string) => {
     setSelectedSlot(time);
@@ -70,7 +110,7 @@ export default function ExpertDetail() {
   if (isLoading) return <DetailSkeleton />;
   if (isError || !expert) return <div>Expert not found</div>;
 
-  const currentDaySlots = expert.availableSlots.find(d => d.date === selectedDate)?.slots || [];
+  const currentDaySlots = expert.availableSlots.find((d: { date: string; slots: { time: string; isBooked: boolean }[] }) => d.date === selectedDate)?.slots || [];
   const rating = (expert.rating / 10).toFixed(1);
 
   return (
@@ -160,7 +200,7 @@ export default function ExpertDetail() {
                     Select Date
                   </label>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {expert.availableSlots.map((slot) => {
+                    {expert.availableSlots.map((slot: { date: string; slots: { time: string; isBooked: boolean }[] }) => {
                       const dateObj = parseISO(slot.date);
                       const isSelected = selectedDate === slot.date;
                       return (
@@ -194,7 +234,7 @@ export default function ExpertDetail() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {currentDaySlots.map((slot) => {
+                      {currentDaySlots.map((slot: { time: string; isBooked: boolean }) => {
                         const isBooked = slot.isBooked || bookedSlots.has(`${selectedDate}-${slot.time}`);
                         const isSelected = selectedSlot === slot.time;
                         

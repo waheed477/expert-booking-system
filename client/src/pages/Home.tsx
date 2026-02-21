@@ -3,27 +3,46 @@ import { useExperts } from "@/hooks/use-experts";
 import { ExpertCard } from "@/components/experts/ExpertCard";
 import { Header } from "@/components/layout/Header";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Search, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDebounce } from "@/hooks/useDebounce";
 import { ExpertCardSkeleton } from "@/components/common/LoadingSkeleton";
+import type { ExpertWithAvailability } from "@shared/schema";
 
-const CATEGORIES = ["All", "Astrology", "Vastu", "Numerology", "Tarot", "Psychology"];
+interface PaginationInfo {
+  page: number;
+  pages: number;
+  total: number;
+  limit: number;
+}
+
+interface ExpertsResponse {
+  data: ExpertWithAvailability[];
+  pagination: PaginationInfo;
+}
+
+// Categories array
+const categories = ['All', 'Astrology', 'Vastu', 'Numerology', 'Tarot'];
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebounce(searchTerm, 500);
-  const [category, setCategory] = useState("All");
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [page, setPage] = useState(1);
   
-  const { data, isLoading, isError } = useExperts({ 
+  const { data, isLoading, isError, refetch } = useExperts({ 
     search: debouncedSearch, 
-    category: category === "All" ? undefined : category,
+    category: selectedCategory !== 'all' ? selectedCategory : undefined,
     page
   });
 
-  const experts = data?.data || [];
-  const pagination = data?.pagination || {};
+  const experts = (data as ExpertsResponse | undefined)?.data || [];
+  const pagination = (data as ExpertsResponse | undefined)?.pagination || { page: 1, pages: 1, total: 0, limit: 10 };
+
+  useEffect(() => {
+    refetch();
+  }, [selectedCategory, refetch]);
 
   const loadMore = () => {
     setPage(prev => prev + 1);
@@ -78,14 +97,14 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12">
-        {/* Categories */}
+        {/* Category Filter Buttons */}
         <div className="flex flex-wrap justify-center gap-2 mb-12">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat}
-              onClick={() => setCategory(cat)}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                category === cat
+              onClick={() => setSelectedCategory(cat === 'All' ? 'all' : cat)}
+              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                (cat === 'All' && selectedCategory === 'all') || selectedCategory === cat
                   ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-2 ring-offset-2 ring-indigo-600"
                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
               }`}
@@ -114,16 +133,21 @@ export default function Home() {
         ) : (
           <div className="space-y-12">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
-              {experts.map((expert, index) => (
-                <motion.div
-                  key={expert.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.05 }}
-                >
-                  <ExpertCard expert={expert} />
-                </motion.div>
-              ))}
+              {experts.map((expert, index) => {
+                // FIX: Use expert._id as key instead of expert.id
+                const uniqueKey = expert._id || expert.id || `expert-${index}`;
+                
+                return (
+                  <motion.div
+                    key={uniqueKey}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.05 }}
+                  >
+                    <ExpertCard expert={expert} />
+                  </motion.div>
+                );
+              })}
             </div>
 
             {pagination.pages > page && (

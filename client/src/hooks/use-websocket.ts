@@ -4,7 +4,19 @@ import { z } from 'zod';
 
 type WebSocketMessage = {
   type: string;
-  payload: any;
+  payload: unknown;
+};
+
+type SlotBookedPayload = {
+  expertId: number;
+  date: string;
+  time: string;
+};
+
+type SlotSelectedPayload = {
+  expertId: number;
+  date: string;
+  time: string;
 };
 
 export function useWebSocket(url: string) {
@@ -43,7 +55,7 @@ export function useWebSocket(url: string) {
       try {
         const message: WebSocketMessage = JSON.parse(event.data);
         if (message.type === type) {
-          callback(message.payload);
+          callback(message.payload as T);
         }
       } catch (error) {
         console.error('Failed to parse WebSocket message', error);

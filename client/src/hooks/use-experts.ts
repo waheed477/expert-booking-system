@@ -1,34 +1,48 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type BookingInput, type BookingResponse } from "@shared/routes";
-import { type ExpertWithAvailability, type Booking } from "@shared/schema";
+import axios from 'axios';
+import { api, buildUrl, type BookingInput, type BookingResponse } from "@/shared/routes";
+import { type ExpertWithAvailability, type Booking } from "@/shared/schema";
+import toast from 'react-hot-toast';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 // --- Experts ---
 
-export function useExperts(filters?: { category?: string; search?: string }) {
+export function useExperts(filters?: { category?: string; search?: string; page?: number }) {
   return useQuery({
-    queryKey: [api.experts.list.path, filters],
+    queryKey: ['experts', filters],
     queryFn: async () => {
-      // Build query string manually or use a helper if URLSearchParams is preferred
-      const queryParams = new URLSearchParams();
-      if (filters?.category && filters.category !== "All") queryParams.append("category", filters.category);
-      if (filters?.search) queryParams.append("search", filters.search);
-
-      const url = `${api.experts.list.path}?${queryParams.toString()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch experts");
-      return await res.json() as ExpertWithAvailability[];
+      const params = new URLSearchParams();
+      if (filters?.category && filters.category !== 'all') {
+        params.append('category', filters.category);
+      }
+      if (filters?.search) {
+        params.append('search', filters.search);
+      }
+      if (filters?.page) {
+        params.append('page', filters.page.toString());
+      }
+      
+      const url = `${API_URL}/api/experts${params.toString() ? `?${params}` : ''}`;
+      console.log('Fetching experts from:', url);
+      
+      const { data } = await axios.get(url);
+      console.log('Experts response:', data);
+      
+      return data;
     },
   });
 }
 
-export function useExpert(id: number) {
+export function useExpert(id: string) {
   return useQuery({
-    queryKey: [api.experts.get.path, id],
+    queryKey: ['expert', id],
     queryFn: async () => {
-      const url = buildUrl(api.experts.get.path, { id });
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch expert");
-      return await res.json() as ExpertWithAvailability;
+      const url = `${API_URL}/api/experts/${id}`;
+      console.log('Fetching expert from:', url);
+      
+      const { data } = await axios.get(url);
+      return data;
     },
     enabled: !!id,
   });
@@ -41,10 +55,14 @@ export function useBookings(email?: string) {
     queryKey: [api.bookings.list.path, email],
     queryFn: async () => {
       if (!email) return [];
-      const url = `${api.bookings.list.path}?email=${encodeURIComponent(email)}`;
+      const url = `${API_URL}/api/bookings?email=${encodeURIComponent(email)}`;
+      console.log('Fetching bookings from:', url);
+      
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch bookings");
-      return await res.json() as Booking[];
+      const data = await res.json();
+      console.log('Bookings response:', data);
+      return data as Booking[];
     },
     enabled: !!email,
   });
@@ -53,26 +71,44 @@ export function useBookings(email?: string) {
 export function useCreateBooking() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: BookingInput) => {
-      const validated = api.bookings.create.input.parse(data);
-      const res = await fetch(api.bookings.create.path, {
-        method: api.bookings.create.method,
+    mutationFn: async (data: any) => {
+      console.log('🔍 CreateBooking - Input data:', data);
+      
+      const url = `${API_URL}/api/bookings`;
+      console.log('🔍 CreateBooking - URL:', url);
+      
+      const res = await fetch(url, {
+        method: 'POST',
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
+        body: JSON.stringify(data),
       });
       
+      const text = await res.text();
+      console.log('🔍 CreateBooking - Raw response:', text);
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to create booking");
+        let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          if (text) {
+            const error = JSON.parse(text);
+            errorMessage = error.error || error.message || errorMessage;
+          }
+        } catch (e) {
+          // Ignore parsing error
+        }
+        throw new Error(errorMessage);
       }
       
-      return await res.json() as BookingResponse;
+      try {
+        return text ? JSON.parse(text) : { success: true };
+      } catch (e) {
+        return { success: true, raw: text };
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.bookings.list.path] });
-      // Also invalidate experts to refresh availability
-      queryClient.invalidateQueries({ queryKey: [api.experts.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.experts.get.path] });
+      queryClient.invalidateQueries({ queryKey: ['experts'] });
+      queryClient.invalidateQueries({ queryKey: ['expert'] });
     },
   });
 }
@@ -80,19 +116,51 @@ export function useCreateBooking() {
 export function useUpdateBookingStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const url = buildUrl(api.bookings.updateStatus.path, { id });
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      console.log('🔍 Updating booking status - ID:', id, 'Status:', status);
+      
+      if (!id) {
+        throw new Error('Booking ID is required');
+      }
+      
+      const url = `${API_URL}/api/bookings/${id}/status`;
+      console.log('🔍 Update URL:', url);
+      
       const res = await fetch(url, {
-        method: api.bookings.updateStatus.method,
+        method: 'PATCH',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
       
-      if (!res.ok) throw new Error("Failed to update booking status");
-      return await res.json();
+      const text = await res.text();
+      console.log('🔍 Update response:', text);
+      
+      if (!res.ok) {
+        let errorMessage = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          if (text) {
+            const error = JSON.parse(text);
+            errorMessage = error.error || error.message || errorMessage;
+          }
+        } catch (e) {
+          // Ignore parsing error
+        }
+        throw new Error(errorMessage);
+      }
+      
+      try {
+        return text ? JSON.parse(text) : { success: true };
+      } catch (e) {
+        return { success: true };
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.bookings.list.path] });
+      toast.success('Booking cancelled successfully');
+    },
+    onError: (error) => {
+      console.error('❌ Cancel error:', error);
+      toast.error(error.message || 'Failed to cancel booking');
     },
   });
 }
